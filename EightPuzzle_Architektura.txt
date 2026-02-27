@@ -1,0 +1,377 @@
+"""
+═══════════════════════════════════════════════════════════════════════════════
+    EIGHT PUZZLE - PAIEŠKOS UŽDAVINIO ARCHITEKTŪRA
+    Detalus paaiškinimas su pavyzdžiais
+═══════════════════════════════════════════════════════════════════════════════
+
+1. ARCHITEKTŪRINIAI KOMPONENTAI (Klasės)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Problem (Bazinė klasė)                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Atsakomybė: Apibrėžia problemą, kurią reikia spręsti                       │
+│                                                                              │
+│ Pagrindiniai metodai:                                                        │
+│   • __init__(initial, goal)     → Inicializuoja pradinę ir tikslinę būseną │
+│   • actions(state)               → Grąžina galimus veiksmus būsenoje        │
+│   • result(state, action)        → Grąžina naują būseną po veiksmo          │
+│   • goal_test(state)             → Patikrina ar pasiektas tikslas           │
+│   • path_cost(c, s1, action, s2) → Apskaičiuoja kelio kainą                │
+│   • h(node)                      → Euristinė funkcija (optional)            │
+│                                                                              │
+│ Pavyzdys EightPuzzle:                                                        │
+│   initial = (2, 4, 3, 1, 5, 6, 7, 8, 0)  # Pradinė 3x3 lentos konfigūracija│
+│   goal = (1, 2, 3, 4, 5, 6, 7, 8, 0)     # Tikslinė konfigūracija          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    ▼ inheritance
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       EightPuzzle(Problem)                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Atsakomybė: Konkreti Eight Puzzle problemos implementacija                  │
+│                                                                              │
+│ Pagrindinės operacijos:                                                      │
+│                                                                              │
+│ 1. find_blank_square(state)                                                  │
+│    → Suranda tuščio kvadrato (0) poziciją                                   │
+│    Pavyzdys: (2,4,3,1,5,6,7,8,0) → grąžina 8                               │
+│                                                                              │
+│ 2. actions(state)                                                            │
+│    → Nustato galimus judesius (UP, DOWN, LEFT, RIGHT)                      │
+│    Tikrina ribas:                                                            │
+│      • Jei blank % 3 == 0 → negalima LEFT                                   │
+│      • Jei blank < 3 → negalima UP                                          │
+│      • Jei blank % 3 == 2 → negalima RIGHT                                  │
+│      • Jei blank > 5 → negalima DOWN                                        │
+│                                                                              │
+│    Pavyzdys:                                                                 │
+│      2 4 3                                                                   │
+│      1 5 6    → blank=8, galimi: ['UP', 'LEFT']                            │
+│      7 8 _                                                                   │
+│                                                                              │
+│ 3. result(state, action)                                                     │
+│    → Atlieka veiksmą ir grąžina naują būseną                               │
+│    Delta: UP=-3, DOWN=3, LEFT=-1, RIGHT=1                                   │
+│                                                                              │
+│    Pavyzdys veiksmas "UP":                                                   │
+│      2 4 3          2 4 3                                                    │
+│      1 5 6    →     1 5 _    (0 ir 6 apsikeičia vietomis)                 │
+│      7 8 _          7 8 6                                                    │
+│                                                                              │
+│ 4. h(node)                                                                   │
+│    → Euristika: skaičiuoja klaidingai išdėstytų plokštelių skaičių        │
+│    Pavyzdys: h((2,4,3,1,5,6,7,8,0)) = 3                                    │
+│              Neteisingose vietose: 2, 4, 1                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Node (Mazgas)                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Atsakomybė: Reprezentuoja vieną būseną paieškos medyje                     │
+│                                                                              │
+│ Atributai:                                                                   │
+│   • state       → Būsena (tuple)                                            │
+│   • parent      → Tėvinis mazgas (Node arba None)                          │
+│   • action      → Veiksmas, kuris atvežė į šią būseną                      │
+│   • path_cost   → Kelias iki šios būsenos (žingsnių skaičius)             │
+│   • depth       → Gylis medyje                                              │
+│                                                                              │
+│ Pavyzdys:                                                                    │
+│   Node(state=(2,4,3,1,5,6,7,8,0),                                          │
+│        parent=None,                                                          │
+│        action=None,                                                          │
+│        path_cost=0,                                                          │
+│        depth=0)                                                              │
+│                                                                              │
+│ Pagrindiniai metodai:                                                        │
+│                                                                              │
+│ 1. expand(problem)                                                           │
+│    → Generuoja visus vaikinius mazgus                                       │
+│    → Kviečia problem.actions() ir problem.result()                         │
+│    → Sukuria child_node() kiekvienam veiksmui                              │
+│                                                                              │
+│ 2. child_node(problem, action)                                              │
+│    → Sukuria vieną vaikinį mazgą                                           │
+│    → Nustate parent=self                                                    │
+│    → Apskaičiuoja naują path_cost                                          │
+│                                                                              │
+│ 3. solution()                                                                │
+│    → Grąžina veiksmų seką nuo šaknies iki šio mazgo                       │
+│    → Naudojasi path() metodu                                                │
+│                                                                              │
+│ 4. path()                                                                    │
+│    → Grąžina mazgų sąrašą nuo šaknies iki šio mazgo                       │
+│    → Eina atgal per parent nuorodas                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   PriorityQueue (Prioritetų eilė)                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Atsakomybė: Saugo mazgus surikiuotus pagal prioritetą                      │
+│                                                                              │
+│ Vidaus struktūra: heap (min-heap)                                           │
+│                                                                              │
+│ Operacijos:                                                                  │
+│   • append(item)  → Įdeda su prioritetu f(item)                            │
+│   • pop()         → Ištraukia elementą su mažiausia f reikšme              │
+│   • __contains__  → Tikrina ar elementas yra eilėje                        │
+│                                                                              │
+│ Naudojimas best_first_graph_search:                                         │
+│   frontier = PriorityQueue('min', lambda n: puzzle.h(n))                    │
+│   → Visada grąžinama būsena su mažiausia euristika                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+2. ALGORITMO VEIKIMAS (best_first_graph_search)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          ALGORITMO ŽINGSNIAI                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Žingsnis 1: INICIALIZACIJA
+─────────────────────────────────────────────────────
+    node = Node(problem.initial)
+    frontier = PriorityQueue('min', f)
+    frontier.append(node)
+    explored = set()
+
+Pradedame su:
+    • vienu mazgu (pradinė būsena)
+    • tuščia explored aibe
+    • prioritetų eile su euristikos funkcija
+
+─────────────────────────────────────────────────────
+Žingsnis 2: PAGRINDINIS CIKLAS
+─────────────────────────────────────────────────────
+    while frontier:
+        
+        2.1: PASIRINKTI GERIAUSIĄ
+        ─────────────────────────
+        node = frontier.pop()
+        
+        → Ištraukia mazgą su MAŽIAUSIA h(n) reikšme
+        → Tai "godusis" (greedy) pasirinkimas
+        
+        2.2: TIKRINTI TIKSLĄ
+        ─────────────────────────
+        if problem.goal_test(node.state):
+            return node
+        
+        → Jei pasiektas tikslas - baigta!
+        → Grąžina mazgą su sprendimu
+        
+        2.3: PAŽYMĖTI PERŽIŪRĖTĄ
+        ─────────────────────────
+        explored.add(node.state)
+        
+        → Išvengiame ciklų
+        → Kiekviena būsena peržiūrima tik kartą
+        
+        2.4: IŠPLĖSTI MAZGĄ
+        ─────────────────────────
+        for child in node.expand(problem):
+            
+            → expand() generuoja visus vaikinius mazgus
+            → Kiekvienam galimam veiksmui
+            
+            2.4.1: PRIDĖTI NAUJUS
+            ────────────────────────
+            if child.state not in explored and child not in frontier:
+                frontier.append(child)
+            
+            → Prideda tik naujas būsenas
+            → PriorityQueue automatiškai rikiuoja pagal h(n)
+            
+            2.4.2: ATNAUJINTI GERESNIUS
+            ────────────────────────────
+            elif child in frontier:
+                if f(child) < frontier[child]:
+                    del frontier[child]
+                    frontier.append(child)
+            
+            → Jei randame geresnį kelią į tą pačią būseną
+            → Atnaujiname
+
+─────────────────────────────────────────────────────
+Žingsnis 3: GRĄŽINTI SPRENDIMĄ
+─────────────────────────────────────────────────────
+    solution = solution_node.solution()
+    
+    → solution() metodas eina atgal per parent nuorodas
+    → Surenka visus veiksmus nuo pradžios iki tikslo
+    → Grąžina: ['UP', 'LEFT', 'UP', ...]
+
+
+3. PAIEŠKOS MEDŽIO VIZUALIZACIJA
+═══════════════════════════════════════════════════════════════════════════════
+
+                            Root (Pradžia)
+                         (2,4,3,1,5,6,7,8,0)
+                              h=3
+                                |
+                    ┌───────────┴───────────┐
+                    │                       │
+                 UP │                   LEFT│
+              h=5   │                  h=5  │
+         (2,4,3,1,5,0,7,8,6)    (2,4,3,1,5,6,7,0,8)
+                    │                       │
+            ┌───────┼───────┐       ┌──────┼──────┐
+            │       │       │       │      │      │
+         UP │    LEFT│   DOWN│    UP│   LEFT│  RIGHT│
+         h=6     h=6    h=4     h=6    h=6    h=4
+            │       │       │       │      │      │
+            ▼       ▼       ▼       ▼      ▼      ▼
+          [...]   [...]   [...]   [...] [...] [...]
+
+→ best_first_graph_search visada renkasi mazgą su mažiausia h(n)
+→ Greitai eina link tikslo, bet ne visada optimalus kelias
+
+
+4. PAIEŠKOS STRATEGIJŲ PALYGINIMAS
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────┬───────────────────┬──────────────────┬──────────────────┐
+│   Algoritmas    │  Duomenų strukt.  │   Prioritetas    │   Optimumas      │
+├─────────────────┼───────────────────┼──────────────────┼──────────────────┤
+│ breadth_first   │  FIFO deque       │ Seniausias       │ ✓ Garantuoja     │
+│                 │  (popleft)        │                  │   trumpiausią    │
+├─────────────────┼───────────────────┼──────────────────┼──────────────────┤
+│ depth_first     │  LIFO stack       │ Naujausias       │ ✗ Ne optimāls    │
+│                 │  (pop)            │                  │                  │
+├─────────────────┼───────────────────┼──────────────────┼──────────────────┤
+│ best_first      │  PriorityQueue    │ Mažiausia h(n)   │ ✗ Godusis,       │
+│ (greedy)        │  (min-heap)       │                  │   ne optimalus   │
+├─────────────────┼───────────────────┼──────────────────┼──────────────────┤
+│ A* search       │  PriorityQueue    │ Mažiausia        │ ✓ Garantuoja     │
+│                 │  (min-heap)       │ f=g(n)+h(n)      │   su admissible h│
+└─────────────────┴───────────────────┴──────────────────┴──────────────────┘
+
+
+5. EURISTIKOS PAVYZDYS
+═══════════════════════════════════════════════════════════════════════════════
+
+EightPuzzle naudoja "misplaced tiles" euristiką:
+
+    Dabartinė būsena:        Tikslāinė būsena:
+    ┌───┬───┬───┐            ┌───┬───┬───┐
+    │ 2 │ 4 │ 3 │            │ 1 │ 2 │ 3 │
+    ├───┼───┼───┤            ├───┼───┼───┤
+    │ 1 │ 5 │ 6 │            │ 4 │ 5 │ 6 │
+    ├───┼───┼───┤            ├───┼───┼───┤
+    │ 7 │ 8 │ 0 │            │ 7 │ 8 │ 0 │
+    └───┴───┴───┘            └───┴───┴───┘
+
+    Neteisingose pozicijose: 2, 4, 1  →  h(n) = 3
+
+    Kuo mažesnis h(n), tuo arčiau tikslo!
+
+
+6. KOMPONENTŲ SĄVEIKA
+═══════════════════════════════════════════════════════════════════════════════
+
+    ┌──────────────┐         naudoja         ┌──────────────┐
+    │   Algoritmas │─────────────────────────▶│   Problem    │
+    │ (best_first) │                          │  (EightPuzz) │
+    └──────┬───────┘                          └──────┬───────┘
+           │                                         │
+           │ sukuria                                 │ apibrėžia
+           │ ir saugo                                │ actions()
+           │                                         │ result()
+           ▼                                         │ h()
+    ┌──────────────┐         reprezentuoja          │
+    │     Node     │◀────────────────────────────────┘
+    │   (mazgas)   │
+    └──────────────┘
+           │
+           │ saugomi
+           ▼
+    ┌──────────────┐
+    │ PriorityQueue│
+    │   frontier   │
+    └──────────────┘
+
+
+7. PILNAS VYKDYMO PAVYZDYS
+═══════════════════════════════════════════════════════════════════════════════
+
+Pradžia:         2 4 3
+                 1 5 6
+                 7 8 _    h=3
+
+    ↓ UP
+
+Žingsnis 1:      2 4 3
+                 1 5 _
+                 7 8 6    h=5
+
+    ↓ LEFT
+
+Žingsnis 2:      2 4 3
+                 1 _ 5
+                 7 8 6    h=6
+
+    ↓ UP
+
+Žingsnis 3:      2 _ 3
+                 1 4 5
+                 7 8 6    h=6
+
+    ↓ LEFT
+
+Žingsnis 4:      _ 2 3
+                 1 4 5
+                 7 8 6    h=5
+
+    ↓ DOWN
+
+Žingsnis 5:      1 2 3
+                 _ 4 5
+                 7 8 6    h=4
+
+    ↓ RIGHT
+
+Žingsnis 6:      1 2 3
+                 4 _ 5
+                 7 8 6    h=3
+
+    ↓ RIGHT
+
+Žingsnis 7:      1 2 3
+                 4 5 _
+                 7 8 6    h=2
+
+    ↓ DOWN
+
+Tikslas:         1 2 3
+                 4 5 6
+                 7 8 _    h=0  ✓
+
+Sprendimas: ['UP','LEFT','UP','LEFT','DOWN','RIGHT','RIGHT','DOWN']
+
+
+═══════════════════════════════════════════════════════════════════════════════
+IŠVADOS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. ARCHITEKTŪRA:
+   • Problem klasė - apibrėžia problemą (actions, result, goal_test, h)
+   • Node klasė - reprezentuoja būseną paieškos medyje
+   • Algoritmas - naudoja Problem ir Node, kad rastų sprendimą
+   • PriorityQueue - efektyviai saugo ir rikiuoja kandidatus
+
+2. ALGORITMAS:
+   • Greedy pasirinkimas pagal euristiką h(n)
+   • Naudoja PriorityQueue - visada renkasi geriausią
+   • Išvengia ciklų su explored set
+   • Greitesnis nei blind search, bet ne visada optimalus
+
+3. PRANAŠUMAI:
+   • Moduliarus dizainas (lengva kurti naujas problemas)
+   • Švari atsakomybių atskyrimas
+   • Galima keisti euristiką ir algoritmą neliečiant problemos
+   • Paieškos algoritmai universal - veikia su bet kuria Problem implementacija
+
+═══════════════════════════════════════════════════════════════════════════════
