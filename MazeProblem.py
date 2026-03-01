@@ -376,3 +376,11 @@ if __name__ == "__main__":
     # Test 4: Spiralinis labirintas - iššūkis!
     print("\n\n")
     test_maze_problem('spiral', 'astar')
+
+    # Test 5: Vidutinis labirintas su A*
+    print("\n\n")
+    test_maze_problem('medium', 'breadth_first')
+
+    # Test 6: Vidutinis labirintas su A*
+    print("\n\n")
+    test_maze_problem('medium', 'depth_first')
